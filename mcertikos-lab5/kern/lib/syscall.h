@@ -1,5 +1,6 @@
 #ifndef _KERN_LIB_SYSCALL_H_
 #define _KERN_LIB_SYSCALL_H_
+#define SYS_brk 45// verify actual number
 
 /*
  * Calling conventions of system calls in CertiKOS:

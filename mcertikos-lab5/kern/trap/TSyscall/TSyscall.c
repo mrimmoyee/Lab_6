@@ -6,13 +6,16 @@
 #include <dev/intr.h>
 #include <lib/ipc.h>
 #include <pcpu/PCPUIntro/export.h>
+#include <mm/pmm.h>
+#include <mm/vmm.h>
+#include <thread/PProc/export.h>
 
 #include "import.h"
 
 extern struct MsgBlock msgBlock[NUM_IDS];
 extern spinlock_t msg_lock;
 
-// recv_id, user_buffer_addr, length
+// Existing syscalls (unchanged)
 void sys_sync_send(tf_t *tf){
    unsigned int cur_pid;
    unsigned int recv_pid, user_addr, length;
@@ -26,7 +29,6 @@ void sys_sync_send(tf_t *tf){
    msgBlock[cur_pid].length = length;
    msg_enqueue(cur_pid);
    thread_wakeup(&msgBlock[cur_pid].send_cv); 
-   // cur_pid has not been read, block and wait for it
    while(msg_getBlockBySendID(cur_pid) != NUM_IDS){
       thread_sleep(&msgBlock[cur_pid].recv_cv, &msg_lock);
    } 
@@ -44,15 +46,12 @@ void sys_sync_recv(tf_t *tf){
    recv_length = syscall_get_arg4(tf);
    cur_pid = get_curid();
    
-   // loop if current pid has no received message or received message is not sent from target process
    while(msg_getBlockBySendID(send_pid) == NUM_IDS || msgBlock[send_pid].recv_pid != cur_pid){
       thread_sleep(&msgBlock[send_pid].send_cv, &msg_lock);
    }
-   // message received
    user_send_addr = msgBlock[send_pid].buffer_addr;
    send_length = msgBlock[send_pid].length;
 
-   // find the min of send_length and recv_length, then copy data from source process addressing space to dest process addressing space 
    copy_length = send_length < recv_length? send_length: recv_length;
    ipc_copy(cur_pid, user_recv_addr, send_pid, user_send_addr, copy_length);
    msg_remove(send_pid);
@@ -64,10 +63,6 @@ void sys_sync_recv(tf_t *tf){
 
 static char sys_buf[NUM_IDS][PAGESIZE];
 
-/**
- * Copies a string from user into buffer and prints it to the screen.
- * This is called by the user level "printf" library as a system call.
- */
 void sys_puts(tf_t *tf)
 {
   unsigned int cur_pid;
@@ -113,23 +108,6 @@ extern uint8_t _binary___obj_user_pingpong_pong_start[];
 extern uint8_t _binary___obj_user_pingpong_ding_start[];
 extern uint8_t _binary___obj_user_fstest_fstest_start[];
 
-/**
- * Spawns a new child process.
- * The user level library function sys_spawn (defined in user/include/syscall.h)
- * takes two arguments [elf_id] and [quota], and returns the new child process id
- * or NUM_IDS (as failure), with appropriate error number.
- * Currently, we have three user processes defined in user/pingpong/ directory,
- * ping, pong, and ding.
- * The linker ELF addresses for those compiled binaries are defined above.
- * Since we do not yet have a file system implemented in mCertiKOS,
- * we statically loading the ELF binraries in to the memory based on the
- * first parameter [elf_id], i.e., ping, pong, and ding corresponds to
- * the elf_id of 1, 2, and 3, respectively.
- * If the parameter [elf_id] is none of those three, then it should return
- * NUM_IDS with the error number E_INVAL_PID. The same error case apply
- * when the proc_create fails.
- * Otherwise, you mark it as successful, and return the new child process id.
- */
 void sys_spawn(tf_t *tf)
 {
   unsigned int new_pid;
@@ -184,12 +162,6 @@ void sys_spawn(tf_t *tf)
   }
 }
 
-/**
- * Yields to another thread/process.
- * The user level library function sys_yield (defined in user/include/syscall.h)
- * does not take any argument and does not have any return values.
- * Do not forget to set the error number as E_SUCC.
- */
 void sys_yield(tf_t *tf)
 {
   thread_yield();
@@ -216,4 +188,95 @@ void sys_consume(tf_t *tf)
     intr_local_enable();
   }
   syscall_set_errno(tf, E_SUCC);
+}
+
+// New sys_brk for Project 10
+#define BRK_CONTIGUOUS 0x1
+#define BRK_SUPERPAGE  0x2
+
+void sys_brk(tf_t *tf)
+{
+    unsigned int pid = get_curid();
+    struct proc *curproc = proc_get(pid);
+    uint32_t addr = syscall_get_arg2(tf);
+    size_t n_pages = syscall_get_arg3(tf);
+    int flags = syscall_get_arg4(tf);
+    uint32_t old_brk = curproc->brk;
+
+    KERN_DEBUG("sys_brk: pid=%d, addr=0x%08x, n_pages=%d, flags=0x%x\n", pid, addr, n_pages, flags);
+
+    if (addr < curproc->heap_start || addr > VM_USERHI) {
+        KERN_DEBUG("Invalid brk address: 0x%08x\n", addr);
+        syscall_set_retval1(tf, -1);
+        syscall_set_errno(tf, E_INVAL_ADDR);
+        return;
+    }
+
+    curproc->superpage_enabled = (flags & BRK_SUPERPAGE) ? 1 : 0;
+    curproc->contiguous_enabled = (flags & BRK_CONTIGUOUS) ? 1 : 0;
+
+    if (addr > old_brk) {
+        size_t pages_needed = (addr - old_brk + PAGE_SIZE - 1) / PAGE_SIZE;
+        if (curproc->superpage_enabled) {
+            if (pages_needed != 1024 || addr & 0x3FFFFF) {
+                KERN_DEBUG("Invalid super page request: addr=0x%08x, pages=%d\n", addr, pages_needed);
+                syscall_set_retval1(tf, -1);
+                syscall_set_errno(tf, E_INVAL_ADDR);
+                return;
+            }
+            struct page *page = alloc_super_page();
+            if (!page) {
+                KERN_DEBUG("Super page allocation failed\n");
+                syscall_set_retval1(tf, -1);
+                syscall_set_errno(tf, E_NOMEM);
+                return;
+            }
+            uint32_t phys_addr = page_to_phys(page);
+            if (map_super_page(old_brk, phys_addr, curproc->pgd) < 0) {
+                free_pages(page, MAX_ORDER);
+                KERN_DEBUG("Super page mapping failed\n");
+                syscall_set_retval1(tf, -1);
+                syscall_set_errno(tf, E_NOMEM);
+                return;
+            }
+        } else {
+            unsigned int order = 0;
+            if (curproc->contiguous_enabled && pages_needed > 1) {
+                order = ilog2(pages_needed);
+                if ((1 << order) < pages_needed)
+                    order++;
+            }
+            struct page *page = alloc_pages(order);
+            if (!page) {
+                KERN_DEBUG("Page allocation failed\n");
+                syscall_set_retval1(tf, -1);
+                syscall_set_errno(tf, E_NOMEM);
+                return;
+            }
+            uint32_t phys_addr = page_to_phys(page);
+            for (uint32_t va = old_brk; va < addr; va += PAGE_SIZE) {
+                if (map_page(va, phys_addr, curproc->pgd, PTE_W | PTE_U | PTE_P) == MagicNumber) {
+                    free_pages(page, order);
+                    KERN_DEBUG("Page mapping failed\n");
+                    syscall_set_retval1(tf, -1);
+                    syscall_set_errno(tf, E_NOMEM);
+                    return;
+                }
+                phys_addr += PAGE_SIZE;
+            }
+        }
+        curproc->brk = addr;
+    } else if (addr < old_brk) {
+        for (uint32_t va = addr; va < old_brk; va += PAGE_SIZE) {
+            uint32_t phys_addr = lookup_phys_addr(curproc->pgd, va);
+            if (phys_addr) {
+                unmap_page(va, curproc->pgd);
+                free_pages(phys_to_page(phys_addr), 0);
+            }
+        }
+        curproc->brk = addr;
+    }
+
+    syscall_set_retval1(tf, 0);
+    syscall_set_errno(tf, E_SUCC);
 }
