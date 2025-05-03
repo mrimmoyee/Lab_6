@@ -1,5 +1,5 @@
-#include <lib/debug.h>
-#include <lib/types.h>
+#include "../lib/debug.h"
+#include "../lib/types.h"
 #include <lib/x86.h>
 #include <lib/trap.h>
 #include <lib/syscall.h>
