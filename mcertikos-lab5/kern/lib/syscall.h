@@ -1,7 +1,22 @@
 #ifndef _KERN_LIB_SYSCALL_H_
 #define _KERN_LIB_SYSCALL_H_
 #define SYS_brk 45// verify actual number
-
+#define BRK_CONTIGUOUS 0x1
+#define BRK_SUPERPAGE  0x2
+static inline int brk(void *addr, size_t n_pages, int flags)
+{
+    int ret;
+    asm volatile(
+        "int %1"
+        : "=a"(ret)
+        : "i"(T_SYSCALL),
+          "a"(SYS_brk),
+          "b"(addr),
+          "c"(n_pages),
+          "d"(flags)
+        : "cc", "memory");
+    return ret;
+}
 /*
  * Calling conventions of system calls in CertiKOS:
  *

@@ -6,15 +6,22 @@
 #include <dev/intr.h>
 #include <lib/ipc.h>
 #include <pcpu/PCPUIntro/export.h>
-#include <mm/pmm.h>
+#include <pmm/pmm.h>
 #include <mm/vmm.h>
-#include <thread/PProc/export.h>
+#include <proc/PProc/export.h>
 
 #include "import.h"
 
 extern struct MsgBlock msgBlock[NUM_IDS];
 extern spinlock_t msg_lock;
-
+extern void sys_brk(tf_t *tf);
+void *syscall_table[] = {
+    // Existing entries
+    [SYS_puts] = sys_puts,
+    [SYS_spawn] = sys_spawn,
+    [SYS_yield] = sys_yield,
+    [SYS_brk] = sys_brk, // Add
+};
 // Existing syscalls (unchanged)
 void sys_sync_send(tf_t *tf){
    unsigned int cur_pid;
