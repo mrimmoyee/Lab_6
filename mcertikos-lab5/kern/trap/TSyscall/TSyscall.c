@@ -15,6 +15,7 @@
 #include "../../lib/syscall.h"
 #include "../../lib/trap.h" // Added to define tf_t
 #include "../../lib/syscall.h" // Ensure tf_t is defined
+#include "../lib/types.c" // Ensure tf_t dependencies are included
 #include "../../lib/types.h" // Ensure tf_t dependencies are included
 #include "../../dev/intr.h"
 
@@ -22,18 +23,58 @@
 #include "../lib/spinlock.c" // Ensure spinlock_t is defined
 #include "../../pmm/pmm.h"          
 #define MAX_ORDER 10 // Define MAX_ORDER if not already defined in included headers
+#define MAX_CHILDREN 16 // Define MAX_CHILDREN with an appropriate value
          
-#include "../../proc/PProc/export.h"
+#include "../../proc/PProc/proc.h"
+#include "../../proc/PProc/proc.h" // Changed to include the header file for struct proc
 #include "../../vmm/MPTComm/export.h" // For map_super_page, map_page, etc.
 
 #include "import.h"
 
 #include "import.h"
 
+typedef struct tf {
+  uint32_t edi;
+  uint32_t esi;
+  uint32_t ebp;
+  uint32_t oesp;
+  uint32_t ebx;
+  uint32_t edx;
+  uint32_t ecx;
+  uint32_t eax;
+  uint16_t gs;
+  uint16_t padding1;
+  uint16_t fs;
+  uint16_t padding2;
+  uint16_t es;
+  uint16_t padding3;
+  uint16_t ds;
+  uint16_t padding4;
+  uint32_t trapno;
+  uint32_t err;
+  uint32_t eip;
+  uint16_t cs;
+  uint16_t padding5;
+  uint32_t eflags;
+  uint32_t esp;
+  uint16_t ss;
+  uint16_t padding6;
+} tf_t;
+
 // Define NUM_IDS with an appropriate value
 #define NUM_IDS 256
 
-extern struct MsgBlock msgBlock[NUM_IDS];
+// Define the MsgBlock structure if not already defined
+struct MsgBlock {
+    unsigned int recv_pid;
+    unsigned int buffer_addr;
+    unsigned int length;
+    void *send_cv; // Added send_cv field
+    void *recv_cv; // Added recv_cv field
+    // Add other fields as necessary
+};
+
+struct MsgBlock msgBlock[NUM_IDS];
 extern spinlock_t msg_lock;
 extern void sys_brk(tf_t *tf);
 void *syscall_table[] = {
