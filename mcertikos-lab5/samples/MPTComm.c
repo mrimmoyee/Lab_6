@@ -28,6 +28,29 @@ void pdir_init(unsigned int mbi_adr)
         i++;
     }
 }
+int map_super_page(uint32_t virt_addr, uint32_t phys_addr, pgd_t *pgd) {
+  // Validate 4MB alignment
+  if (virt_addr & 0x3FFFFF || phys_addr & 0x3FFFFF) {
+      cprintf("map_super_page: Invalid alignment - virt: 0x%x, phys: 0x%x\n", virt_addr, phys_addr);
+      return -1; // EINVAL
+  }
+
+  // Get page directory entry
+  pgd_t *pde = pgd_offset(pgd, virt_addr);
+  if (!pde) {
+      cprintf("map_super_page: Invalid PDE for virt_addr 0x%x\n", virt_addr);
+      return -1;
+  }
+
+  // Set PDE for 4MB page (PS bit enables super page)
+  pde->val = (phys_addr & 0xFFC00000) | PG_PRESENT | PG_WRITE | PG_PS;
+
+  // Flush TLB for the virtual address
+  asm volatile("invlpg (%0)" : : "r"(virt_addr) : "memory");
+
+  cprintf("Mapped super page: virt 0x%x -> phys 0x%x\n", virt_addr, phys_addr);
+  return 0;
+}
 
 /**
  * Allocates a page (with container_alloc) for the page table,

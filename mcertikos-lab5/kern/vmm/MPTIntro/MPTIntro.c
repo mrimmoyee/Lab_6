@@ -111,3 +111,45 @@ void rmv_ptbl_entry(unsigned int proc_index, unsigned int pde_index, unsigned in
     *((unsigned int *) addr) = 0;
 }
 
+void page_fault_handler(struct trapframe *tf) {
+    // Get faulting address from CR2
+    uint32_t fault_addr = rcr2();
+    struct proc *curproc = current_proc();
+    uint32_t aligned_addr = fault_addr & ~0x3FFFFF; // Align to 4MB boundary
+
+    // Debug log
+    cprintf("Page fault at addr 0x%x, proc %d\n", fault_addr, curproc->pid);
+
+    // Check if fault is in heap and super pages are enabled
+    if (fault_addr >= curproc->heap_start && fault_addr < curproc->brk &&
+        curproc->superpage_enabled && (fault_addr == aligned_addr)) {
+        // Allocate a 4MB super page (1024 * 4KB pages)
+        struct page *page = alloc_super_page(); // From pmm.c (buddy allocator)
+        if (!page) {
+            cprintf("Super page allocation failed for addr 0x%x\n", fault_addr);
+            kill_proc(curproc);
+            return;
+        }
+
+        uint32_t phys_addr = page_to_phys(page);
+        // Map the 4MB page
+        if (map_super_page(aligned_addr, phys_addr, curproc->pgd) < 0) {
+            cprintf("Super page mapping failed for addr 0x%x\n", aligned_addr);
+            free_pages(page, MAX_ORDER); // Free on failure
+            kill_proc(curproc);
+            return;
+        }
+    } else {
+        // Existing 4KB page fault handling (from Lab 5)
+        struct page *page = alloc_pages(0); // Single page
+        if (!page) {
+            cprintf("Page allocation failed for addr 0x%x\n", fault_addr);
+            kill_proc(curproc);
+            return;
+        }
+
+        uint32_t phys_addr = page_to_phys(page);
+        // Map 4KB page (likely an existing function in MPTComm)
+        map_page(fault_addr & ~0xFFF, phys_addr, curproc->pgd, PG_PRESENT | PG_WRITE);
+    }
+}

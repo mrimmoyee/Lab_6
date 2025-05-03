@@ -6,9 +6,12 @@
 #include <dev/intr.h>
 #include <lib/ipc.h>
 #include <pcpu/PCPUIntro/export.h>
-#include <pmm/pmm.h>
-#include <mm/vmm.h>
+#include <pmm/pmm.h>          
+#include <mm/vmm.h>           
 #include <proc/PProc/export.h>
+#include <vmm/MPTComm/export.h> // For map_super_page, map_page, etc.
+
+#include "import.h"
 
 #include "import.h"
 
