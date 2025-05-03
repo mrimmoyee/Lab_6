@@ -145,6 +145,28 @@ void interrupt_handler (tf_t *tf)
     }
 }
 
+void trap(struct TrapFrame *tf) {
+    switch (tf->tf_trapno) {
+        case T_SYSCALL:
+            // Handle system call
+            tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, 
+                                          tf->tf_regs.reg_edx, 
+                                          tf->tf_regs.reg_ecx, 
+                                          tf->tf_regs.reg_ebx,
+                                          tf->tf_regs.reg_edi, 
+                                          tf->tf_regs.reg_esi);
+            break;
+
+        case T_PGFLT:
+            // Page fault handling
+            panic("Page fault at 0x%08x\n", rcr2());  // rcr2() gets the faulting address
+            break;
+
+        default:
+            panic("Unhandled trap: %d\n", tf->tf_trapno);
+    }
+}
+
 void trap (tf_t *tf)
 {
     unsigned int cur_pid;
