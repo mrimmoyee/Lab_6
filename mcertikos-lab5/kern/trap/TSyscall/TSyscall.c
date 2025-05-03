@@ -15,10 +15,11 @@
 #include "../../lib/syscall.h"
 #include "../../lib/trap.h" // Added to define tf_t
 #include "../../lib/syscall.h" // Ensure tf_t is defined
+#include "../../lib/types.h" // Ensure tf_t dependencies are included
 #include "../../dev/intr.h"
 
 #include "../../pcpu/PCPUIntro/export.h"
-#include "../../lib/spinlock.h" // Added to define spinlock_t
+#include "../lib/spinlock.c" // Ensure spinlock_t is defined
 #include "../../pmm/pmm.h"          
 #define MAX_ORDER 10 // Define MAX_ORDER if not already defined in included headers
          
@@ -28,6 +29,9 @@
 #include "import.h"
 
 #include "import.h"
+
+// Define NUM_IDS with an appropriate value
+#define NUM_IDS 256
 
 extern struct MsgBlock msgBlock[NUM_IDS];
 extern spinlock_t msg_lock;
