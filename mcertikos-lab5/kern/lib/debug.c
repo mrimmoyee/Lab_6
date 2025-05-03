@@ -1,10 +1,18 @@
-#include <lib/debug.h>
-#include <lib/gcc.h>
-#include <lib/stdarg.h>
-#include <lib/x86.h>
+#include "../lib/debug.h"
+#include "../lib/gcc.h"
+#include "../lib/stdarg.h"
+#include "../lib/x86.h"
 
-#include <lib/types.h>
-#include <lib/spinlock.h>
+#include "../lib/types.h"
+#include "../lib/spinlock.h"
+
+// Define spinlock_t if not already defined
+#ifndef SPINLOCK_T_DEFINED
+#define SPINLOCK_T_DEFINED
+typedef struct {
+	volatile int locked;
+} spinlock_t;
+#endif
 
 static spinlock_t debug_lk;
 static spinlock_t serial_lk;

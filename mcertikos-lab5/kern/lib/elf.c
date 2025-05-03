@@ -1,10 +1,10 @@
-#include <lib/debug.h>
-#include <lib/elf.h>
-#include <lib/string.h>
-#include <lib/types.h>
-#include <lib/x86.h>
-#include <lib/pmap.h>
-#include <lib/gcc.h>
+#include "../lib/debug.h"
+#include "../lib/elf.h"
+#include "../lib/string.h"
+#include "../lib/types.h"
+#include "../lib/x86.h"
+#include "../lib/pmap.h"
+#include "../lib/gcc.h"
 
 #define VM_TOP		0xffffffff
 #define VM_USERHI	0xf0000000

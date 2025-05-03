@@ -1,5 +1,50 @@
 #include "pmm.h"
-#include <lib/debug.h>
+#include "../lib/debug.h"
+#include <stdint.h> // Include for uint32_t and other fixed-width integer types
+#include <stddef.h> // Include for NULL definition
+ // Update the path to the correct location of list.h
+
+#ifndef LIST_H
+#define LIST_H
+
+struct list_head {
+    struct list_head *next, *prev;
+};
+
+#define INIT_LIST_HEAD(ptr) do { \
+    (ptr)->next = (ptr);         \
+    (ptr)->prev = (ptr);         \
+} while (0)
+
+#define list_first_entry(ptr, type, member) \
+    ((type *)((char *)(ptr)->next - offsetof(type, member)))
+
+#define list_empty(head) ((head)->next == (head))
+
+#define list_add(new, head) do { \
+    (new)->next = (head)->next;  \
+    (new)->prev = (head);        \
+    (head)->next->prev = (new);  \
+    (head)->next = (new);        \
+} while (0)
+
+#define list_del(entry) do { \
+    (entry)->next->prev = (entry)->prev; \
+    (entry)->prev->next = (entry)->next; \
+} while (0)
+
+#endif // LIST_H
+// Define PMM_SUPERPAGE flag
+#define PMM_SUPERPAGE (1 << 0)
+struct page {
+    int allocated;
+    unsigned int order;
+    struct list_head list; // Ensure this field is correctly declared for list operations
+};
+
+#define MAX_ORDER 10 // Define MAX_ORDER with an appropriate value
+#define PAGE_SIZE 4096 // Define PAGE_SIZE as 4KB
+#define SUPER_PAGE_SIZE (PAGE_SIZE * (1 << MAX_ORDER)) // Define SUPER_PAGE_SIZE as a super-page size
 
 static unsigned num_pages = 0;         // Total number of physical pages
 static struct page *page_array;        // Array of page metadata
@@ -108,5 +153,5 @@ uint32_t page_to_phys(struct page *page) {
 struct page *phys_to_page(uint32_t phys_addr) {
     if (phys_addr < mem_base || phys_addr >= mem_base + (num_pages * PAGE_SIZE))
         return NULL;
-    return &page_array[(phys_addr - mem_base) / PAGE_SIZE];
+    return &page_array[(phys_addr - mem_base) / PAGE_SIZE];
 }
