@@ -1,12 +1,26 @@
 #include "../../lib/debug.h"  // Changed from "../lib/debug.h"
 #include "../../lib/types.h"
+#define E_NOMEM 12 // Define E_NOMEM as an error code for "Out of memory"
+#include <stdint.h> // Added to define uint32_t
+#include <stddef.h> // Added to define size_t
+
+#define PAGE_SIZE 4096 // Define PAGE_SIZE as 4KB
+#define PTE_P 0x1      // Define PTE_P as the present bit in page table entries
+#define VM_USERHI 0xBFFFFFFF // Define VM_USERHI as the upper limit of the user address space
+#define VM_USERLO 0x00000000 // Define VM_USERLO as the lower limit of the user address space
+#define PTE_W 0x2      // Define PTE_W as the writeable bit in page table entries
+#define PTE_U 0x4      // Define PTE_U as the user-accessible bit in page table entries
 #include "../../lib/x86.h"
 #include "../../lib/trap.h"
 #include "../../lib/syscall.h"
+#include "../../lib/trap.h" // Added to define tf_t
+#include "../../lib/syscall.h" // Ensure tf_t is defined
 #include "../../dev/intr.h"
 
 #include "../../pcpu/PCPUIntro/export.h"
+#include "../../lib/spinlock.h" // Added to define spinlock_t
 #include "../../pmm/pmm.h"          
+#define MAX_ORDER 10 // Define MAX_ORDER if not already defined in included headers
          
 #include "../../proc/PProc/export.h"
 #include "../../vmm/MPTComm/export.h" // For map_super_page, map_page, etc.
@@ -71,7 +85,7 @@ void sys_sync_recv(tf_t *tf){
    spinlock_release(&msg_lock); 
 }
 
-static char sys_buf[NUM_IDS][PAGESIZE];
+static char sys_buf[NUM_IDS][PAGE_SIZE];
 
 void sys_puts(tf_t *tf)
 {
@@ -92,10 +106,10 @@ void sys_puts(tf_t *tf)
   cur_pos = str_uva;
 
   while (remain) {
-    if (remain < PAGESIZE - 1)
+    if (remain < PAGE_SIZE - 1)
       nbytes = remain;
     else
-      nbytes = PAGESIZE - 1;
+      nbytes = PAGE_SIZE - 1;
 
     if (pt_copyin(cur_pid,
 		  cur_pos, sys_buf[cur_pid], nbytes) != nbytes) {
@@ -265,7 +279,7 @@ void sys_brk(tf_t *tf)
             }
             uint32_t phys_addr = page_to_phys(page);
             for (uint32_t va = old_brk; va < addr; va += PAGE_SIZE) {
-                if (map_page(va, phys_addr, curproc->pgd, PTE_W | PTE_U | PTE_P) == MagicNumber) {
+                if (map_page(va, phys_addr, curproc->pgd, PTE_W | PTE_U | PTE_P) < 0) {
                     free_pages(page, order);
                     KERN_DEBUG("Page mapping failed\n");
                     syscall_set_retval1(tf, -1);

@@ -59,6 +59,8 @@
   "C_Cpp.errorSquiggles": "enabled",
   "files.associations": {
     "pmap.h": "c",
-    "types.h": "c"
+    "types.h": "c",
+    "import.h": "c",
+    "spinlock.h": "c"
   }
 }
